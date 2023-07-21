@@ -164,7 +164,7 @@ def build_graph(data):
              label='effective')
 
     # legend and labels
-    ax.legend(loc='upper right')
+    ax.legend(loc='lower left')
     ax.set_xlabel('time')
     ax.set_ylabel('percent')
     ax.set_title('Battery capacity statistics')
