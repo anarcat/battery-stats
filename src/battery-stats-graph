@@ -34,31 +34,42 @@ import numpy as np
 import csv
 
 parser = argparse.ArgumentParser()
-parser.add_argument('logfile', nargs='*',
-                    default='/var/log/battery-stats.csv*',
-                    help='logfile to read (default: %(default)s)')
-parser.add_argument('--output', type=argparse.FileType('wb'),
-                    default=sys.stdout,
-                    help='image to write (default to terminal if available, otherwise stdout)')
-parser.add_argument('--death', type=int, default=5,
-                    help='percentage of battery when it is considered dead (default: %(default)s)')
+parser.add_argument(
+    "logfile",
+    nargs="*",
+    default="/var/log/battery-stats.csv*",
+    help="logfile to read (default: %(default)s)",
+)
+parser.add_argument(
+    "--output",
+    type=argparse.FileType("wb"),
+    default=sys.stdout,
+    help="image to write (default to terminal if available, otherwise stdout)",
+)
+parser.add_argument(
+    "--death",
+    type=int,
+    default=5,
+    help="percentage of battery when it is considered dead (default: %(default)s)",
+)
 args = parser.parse_args()
 if type(args.logfile) is str:
     args.logfile = glob.glob(args.logfile)
 logfiles = fileinput.input(args.logfile, openhook=fileinput.hook_compressed)
 
-now = 'energy_now'
-full = 'energy_full'
-full_design = 'energy_full_design'
+now = "energy_now"
+full = "energy_full"
+full_design = "energy_full_design"
 
 # keep a copy of the original iterator function
 real_readline = logfiles.__next__
 
+
 def sanitized_readline():
     """clear out null characters from input
 
-Those show up in the CSV logfiles frequently as updates happen during
-shutdown or power outages.
+    Those show up in the CSV logfiles frequently as updates happen during
+    shutdown or power outages.
     """
     line = real_readline()
     newline = line.replace("\0", "")
@@ -66,30 +77,37 @@ shutdown or power outages.
         raise csv.Error("something wrong")
     return newline
 
+
 # replace the iterator with our filtered version
 logfiles.__next__ = sanitized_readline
 
+
 def parse_csv_np():
-    logging.debug('loading CSV file %s with NumPy', args.logfile)
-    data = np.genfromtxt(logfiles,
-                         delimiter=',', names=True,
-                         filling_values = 0.0)
+    logging.debug("loading CSV file %s with NumPy", args.logfile)
+    data = np.genfromtxt(logfiles, delimiter=",", names=True, filling_values=0.0)
     # convert timestamp to datetime, but also select only relevant
     # fields to avoid having to specify all
     # XXX: it seems that datetime is not what plot expects, so stick
     # with float and we convert later
-    #return data.astype([('timestamp', 'datetime64[s]'),
+    # return data.astype([('timestamp', 'datetime64[s]'),
     #                    ('energy_full', 'f'),
     #                    ('energy_full_design', 'f'),
     #                    ('energy_now', 'f')])
     return data
 
-def parse_csv_builtin(fields =
-                      ['timestamp',
-                       'energy_full', 'energy_full_design', 'energy_now',
-                       'charge_now', 'charge_full', 'charge_full_design'
-                       ]):
-    logging.debug('loading CSV file %s with builtin CSV module', args.logfile)
+
+def parse_csv_builtin(
+    fields=[
+        "timestamp",
+        "energy_full",
+        "energy_full_design",
+        "energy_now",
+        "charge_now",
+        "charge_full",
+        "charge_full_design",
+    ]
+):
+    logging.debug("loading CSV file %s with builtin CSV module", args.logfile)
     log = csv.DictReader(logfiles)
     first_timestamp = 0
     data = []
@@ -98,21 +116,25 @@ def parse_csv_builtin(fields =
         for row in log:
             line = line + 1
             if 0 == first_timestamp:
-                first_timestamp = row['timestamp']
+                first_timestamp = row["timestamp"]
             v = []
             for f in fields:
-                if f not in row or '' == row[f]:
+                if f not in row or "" == row[f]:
                     v.append(None)
                 else:
                     v.append(row[f])
             l = tuple(v)
             data.append(l)
-            if row['timestamp'] < first_timestamp:
+            if row["timestamp"] < first_timestamp:
                 print(line, first_timestamp, row)
     except csv.Error as e:
-        logging.warning('CSV file is corrupt around line %d, skipping remaining entries: %s' % (line, e))
-    logging.debug('building data array')
-    return np.array(data, dtype=list(zip(fields, 'f'*len(fields))))
+        logging.warning(
+            "CSV file is corrupt around line %d, skipping remaining entries: %s"
+            % (line, e)
+        )
+    logging.debug("building data array")
+    return np.array(data, dtype=list(zip(fields, "f" * len(fields))))
+
 
 # the builtin CSV parser above is faster, we went from 8 to 2 seconds
 # on our test data here there are probably other ways of making this
@@ -126,48 +148,59 @@ def parse_csv_builtin(fields =
 # apparently all outperform the above code by an order of magnitude
 parse_csv = parse_csv_builtin
 
+
 def to_percent(y, position):
     # Ignore the passed in position. This has the effect of scaling
     # the default tick locations.
     s = str(100 * y)
 
     # The percent symbol needs escaping in latex
-    if matplotlib.rcParams['text.usetex']:
-        return s + r'$\%$'
+    if matplotlib.rcParams["text.usetex"]:
+        return s + r"$\%$"
     else:
-        return s + '%'
+        return s + "%"
+
 
 def build_graph(data):
-    logging.debug('building graph')
+    logging.debug("building graph")
     # create vectorized converter (can take list-like objects as
     # arguments)
     dateconv = np.vectorize(datetime.datetime.fromtimestamp)
-    dates = dateconv(data['timestamp'].astype(int))
+    dates = dateconv(data["timestamp"].astype(int))
 
     fig, ax = plt.subplots()
 
     # XXX: can't seem to plot all at once...
-    #plt.plot(dates, data[now], '-b', data[full], '-r')
+    # plt.plot(dates, data[now], '-b', data[full], '-r')
     # ... but once at a time seems to do the result i am looking for
-    ax.plot(dates, data[full_design] / data[full_design],
-             linestyle = '-',
-             color = 'black',
-             label='design')
-    ax.plot(dates, data[now] / data[full_design],
-             linestyle = '-',
-             linewidth = 0.1,
-             color='grey',
-             label='current')
-    ax.plot(dates, data[full] / data[full_design],
-             linestyle = '-',
-             color = 'red',
-             label='effective')
+    ax.plot(
+        dates,
+        data[full_design] / data[full_design],
+        linestyle="-",
+        color="black",
+        label="design",
+    )
+    ax.plot(
+        dates,
+        data[now] / data[full_design],
+        linestyle="-",
+        linewidth=0.1,
+        color="grey",
+        label="current",
+    )
+    ax.plot(
+        dates,
+        data[full] / data[full_design],
+        linestyle="-",
+        color="red",
+        label="effective",
+    )
 
     # legend and labels
-    ax.legend(loc='lower left')
-    ax.set_xlabel('time')
-    ax.set_ylabel('percent')
-    ax.set_title('Battery capacity statistics')
+    ax.legend(loc="lower left")
+    ax.set_xlabel("time")
+    ax.set_ylabel("percent")
+    ax.set_title("Battery capacity statistics")
 
     # Tell matplotlib to interpret the x-axis values as dates
     ax.xaxis_date()
@@ -182,51 +215,56 @@ def build_graph(data):
     # Set the formatter
     ax.yaxis.set_major_formatter(formatter)
 
+
 def render_graph():
-    if args.output == sys.stdout and \
-            ('DISPLAY' in os.environ or sys.stdout.isatty()):
+    if args.output == sys.stdout and ("DISPLAY" in os.environ or sys.stdout.isatty()):
         logging.info("drawing on tty")
         plt.show()
     else:
-        logging.info('drawing to file %s', args.output)
-        plt.savefig(args.output, bbox_inches='tight')
+        logging.info("drawing to file %s", args.output)
+        plt.savefig(args.output, bbox_inches="tight")
 
-def guess_expiry(x, y, zero = 0):
-    fit = np.polyfit(data[full], data['timestamp'], 1)
-    #print "fit: %s" % fit
+
+def guess_expiry(x, y, zero=0):
+    fit = np.polyfit(data[full], data["timestamp"], 1)
+    # print "fit: %s" % fit
 
     fit_fn = np.poly1d(fit)
-    #print "fit_fn: %s" % fit_fn
+    # print "fit_fn: %s" % fit_fn
     return datetime.datetime.fromtimestamp(fit_fn(zero))
 
+
 if __name__ == "__main__":
-    logging.basicConfig(format='%(message)s', level=logging.DEBUG)
-    logging.getLogger('matplotlib').setLevel('INFO')
-    logging.getLogger('PIL').setLevel('INFO')
+    logging.basicConfig(format="%(message)s", level=logging.DEBUG)
+    logging.getLogger("matplotlib").setLevel("INFO")
+    logging.getLogger("PIL").setLevel("INFO")
     data = parse_csv()
 
-    if str(data[full_design][1]) in ['', 'nan']:
-        logging.warning('switching to charge_* prefix')
-        now = 'charge_now'
-        full = 'charge_full'
-        full_design = 'charge_full_design'
-
+    if str(data[full_design][1]) in ["", "nan"]:
+        logging.warning("switching to charge_* prefix")
+        now = "charge_now"
+        full = "charge_full"
+        full_design = "charge_full_design"
 
     # XXX: this doesn't work because it counts all charge/discharge
     # cycles, we'd need to reprocess the CSV to keep only the last
     # continuous states
-    #death = guess_expiry(data[now], data['timestamp'])
-    #logging.info("this battery will be depleted in %s, on %s",
+    # death = guess_expiry(data[now], data['timestamp'])
+    # logging.info("this battery will be depleted in %s, on %s",
     #             death - datetime.datetime.now(), death)
 
     # actual energy at which the battery is considered dead
     # we compute the mean design capacity, then take the given percentage out of that
-    logging.debug('guessing expiry')
+    logging.debug("guessing expiry")
     zero = args.death * np.mean(data[full_design]) / 100
     try:
-        death = guess_expiry(data[full], data['timestamp'], zero)
-        logging.info("this battery will reach end of life (%s%%) in %s, on %s",
-                     args.death, death - datetime.datetime.now(), death)
+        death = guess_expiry(data[full], data["timestamp"], zero)
+        logging.info(
+            "this battery will reach end of life (%s%%) in %s, on %s",
+            args.death,
+            death - datetime.datetime.now(),
+            death,
+        )
     except ValueError as e:
         logging.warning("could not guess battery expiry: %s", e)
 
