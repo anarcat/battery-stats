@@ -201,6 +201,8 @@ def guess_expiry(x, y, zero = 0):
 
 if __name__ == "__main__":
     logging.basicConfig(format='%(message)s', level=logging.DEBUG)
+    logging.getLogger('matplotlib').setLevel('INFO')
+    logging.getLogger('PIL').setLevel('INFO')
     data = parse_csv()
 
     if str(data[full_design][1]) in ['', 'nan']:
