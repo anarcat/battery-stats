@@ -114,6 +114,9 @@ def parse_csv_builtin(
     try:
         for row in log:
             line = line + 1
+            if row.get("timestamp").startswith("\x00"):
+                logging.warning("skipping null timestamp on line %s", line)
+                continue
             if 0 == first_timestamp:
                 first_timestamp = row["timestamp"]
             v = []
@@ -126,7 +129,7 @@ def parse_csv_builtin(
             data.append(l)
             if row["timestamp"] < first_timestamp:
                 print(line, first_timestamp, row)
-    except csv.Error as e:
+    except (ValueError, csv.Error) as e:
         logging.warning(
             "CSV file is corrupt around line %d, skipping remaining entries: %s"
             % (line, e)
